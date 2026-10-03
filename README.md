@@ -1,8 +1,11 @@
-# Live Dashboard 自建改造版
+# live-dashboard-ksu
 
-> **KernelSU 上报模块 · 应用使用时长统计 · 事件通知 · 隐私模式 · 纯 IPv6 公网部署**
+> **Live Dashboard 自建改造版** · KernelSU 上报模块 · 应用使用时长统计 · 事件通知 · 隐私模式 · 纯 IPv6 公网部署
 
-本仓库是 [**Monika-Dream/live-dashboard**](https://github.com/Monika-Dream/live-dashboard) 的**个人改造版**（独立仓库，非官方版本）。
+本仓库是 [**Monika-Dream/live-dashboard**](https://github.com/Monika-Dream/live-dashboard) 的**个人改造版**（独立仓库，非官方版本，不是 GitHub fork）。
+
+仓库名里的 **ksu = KernelSU** —— 本改造最大的变化就是用 **KernelSU root 模块**取代了上游依赖的官方 Android App。
+
 上游是一个"视监面板"：把你设备正在使用的应用实时展示在一个网页看板上。
 
 ---
