@@ -305,4 +305,103 @@ export function cleanupUnconfiguredDeviceData(allowedDeviceIds: string[]): {
   return tx(allowedDeviceIds);
 }
 
+
+// ── 使用时长统计 ──
+db.run(`
+  CREATE TABLE IF NOT EXISTS usage_stats (
+    device_id TEXT NOT NULL,
+    date TEXT NOT NULL,
+    app_id TEXT NOT NULL,
+    app_name TEXT NOT NULL,
+    minutes REAL NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (device_id, date, app_id)
+  )
+`);
+db.run(`CREATE INDEX IF NOT EXISTS idx_usage_date ON usage_stats(date, device_id)`);
+
+// ── 事件（供"我这边"轮询做通知） ──
+db.run(`
+  CREATE TABLE IF NOT EXISTS events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at TEXT NOT NULL,
+    device_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    meta TEXT DEFAULT '{}'
+  )
+`);
+db.run(`CREATE INDEX IF NOT EXISTS idx_events_device ON events(device_id, id)`);
+
+export const upsertUsage = db.prepare(`
+  INSERT INTO usage_stats (device_id, date, app_id, app_name, minutes, updated_at)
+  VALUES (?, ?, ?, ?, ?, ?)
+  ON CONFLICT(device_id, date, app_id) DO UPDATE SET
+    app_name = excluded.app_name, minutes = excluded.minutes, updated_at = excluded.updated_at
+`);
+
+export const getUsageByDate = db.prepare(`
+  SELECT device_id, app_id, app_name, minutes FROM usage_stats
+  WHERE date = ? AND (? = '' OR device_id = ?)
+  ORDER BY minutes DESC LIMIT 60
+`);
+
+export const insertEvent = db.prepare(`
+  INSERT INTO events (created_at, device_id, kind, title, body, meta, notify) VALUES (?, ?, ?, ?, ?, ?, ?)
+`);
+
+export const getEventsSince = db.prepare(`
+  SELECT id, created_at, device_id, kind, title, body, notify FROM events
+  WHERE id > ? ORDER BY id ASC LIMIT ?
+`);
+
+export const listDeviceStates = db.prepare(`SELECT * FROM device_states`);
+
+export const getLastEventByKind = db.prepare(`
+  SELECT created_at FROM events WHERE device_id = ? AND kind = ? ORDER BY id DESC LIMIT 1
+`);
+
+
+// ── 屏幕时间（亮屏/解锁），口径对齐系统 UsageStats ──
+db.run(`
+  CREATE TABLE IF NOT EXISTS screen_time (
+    device_id TEXT NOT NULL,
+    date TEXT NOT NULL,
+    screen_minutes REAL,
+    unlocked_minutes REAL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (device_id, date)
+  )
+`);
+export const upsertScreenTime = db.prepare(`
+  INSERT INTO screen_time (device_id, date, screen_minutes, unlocked_minutes, updated_at)
+  VALUES (?, ?, ?, ?, ?)
+  ON CONFLICT(device_id, date) DO UPDATE SET
+    screen_minutes = COALESCE(excluded.screen_minutes, screen_time.screen_minutes),
+    unlocked_minutes = COALESCE(excluded.unlocked_minutes, screen_time.unlocked_minutes),
+    updated_at = excluded.updated_at
+`);
+export const getScreenTime = db.prepare(`SELECT screen_minutes, unlocked_minutes FROM screen_time WHERE device_id = ? AND date = ?`);
+
+
+// ── 区间统计（周/月视图） ──
+export const getUsageDaily = db.prepare(`
+  SELECT date, SUM(minutes) AS total_minutes FROM usage_stats
+  WHERE date >= ? AND date <= ? AND (? = '' OR device_id = ?)
+  GROUP BY date ORDER BY date ASC
+`);
+
+export const getUsageTopInRange = db.prepare(`
+  SELECT app_id, app_name, SUM(minutes) AS minutes FROM usage_stats
+  WHERE date >= ? AND date <= ? AND (? = '' OR device_id = ?)
+  GROUP BY app_id ORDER BY minutes DESC LIMIT 80
+`);
+
+export const getScreenTimeRange = db.prepare(`
+  SELECT date, SUM(screen_minutes) AS screen_minutes, SUM(unlocked_minutes) AS unlocked_minutes
+  FROM screen_time WHERE date >= ? AND date <= ? AND (? = '' OR device_id = ?)
+  GROUP BY date ORDER BY date ASC
+`);
+
 export default db;

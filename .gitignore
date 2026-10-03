@@ -27,3 +27,14 @@ agents/android-app/build/
 agents/android-app/keystore.properties
 agents/android-app/*.keystore
 *.hprof
+
+# ---- 本项目追加：运行数据与构建产物（含个人数据，绝不入库）----
+data/
+packages/backend/public/
+packages/frontend/out/
+node_modules/
+.next/
+*.log
+*.bak.*
+diag-*.log
+# ---- added by this fork: runtime data / build artifacts (never commit personal data) ----

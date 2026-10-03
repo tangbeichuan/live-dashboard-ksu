@@ -237,3 +237,66 @@ export async function fetchHealthData(
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
+
+export interface UsageRecord {
+  device_id: string;
+  app_id: string;
+  app_name: string;
+  minutes: number;
+}
+
+export interface UsageResponse {
+  date: string;
+  device_id: string;
+  total_minutes: number;
+  screen_minutes: number | null;
+  unlocked_minutes: number | null;
+  records: UsageRecord[];
+}
+
+export async function fetchUsage(
+  date: string,
+  signal?: AbortSignal,
+  deviceId?: string,
+  options?: DashboardRequestOptions,
+): Promise<UsageResponse> {
+  const params = new URLSearchParams({ date });
+  if (deviceId) params.set("device_id", deviceId);
+  const url = withQuery(buildApiUrl("/api/usage", options), params);
+  const res = await fetch(url, { signal });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export interface UsageDaily {
+  date: string;
+  total_minutes: number;
+  screen_minutes: number | null;
+  unlocked_minutes: number | null;
+}
+
+export interface UsageRangeResponse {
+  end: string;
+  start: string;
+  days: number;
+  device_id: string;
+  total_minutes: number;
+  screen_minutes: number | null;
+  daily: UsageDaily[];
+  top: UsageRecord[];
+}
+
+export async function fetchUsageRange(
+  end: string,
+  days: number,
+  signal?: AbortSignal,
+  deviceId?: string,
+  options?: DashboardRequestOptions,
+): Promise<UsageRangeResponse> {
+  const params = new URLSearchParams({ end, days: String(days) });
+  if (deviceId) params.set("device_id", deviceId);
+  const url = withQuery(buildApiUrl("/api/usage/range", options), params);
+  const res = await fetch(url, { signal });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}

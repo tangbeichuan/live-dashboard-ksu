@@ -65,6 +65,18 @@ export default function DatePicker({ selectedDate, onChange }: Props) {
         </button>
       </div>
 
+      {/* Date jump input */}
+      <input
+        type="date"
+        value={selectedDate}
+        max={todayStr()}
+        onChange={(e) => e.target.value && onChange(e.target.value)}
+        className="pill-btn text-xs px-2 py-1"
+        style={{ background: "transparent" }}
+        aria-label="Jump to date"
+        title="跳转到指定日期"
+      />
+
       {/* Today shortcut */}
       {!isToday && (
         <button

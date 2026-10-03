@@ -10,12 +10,16 @@ import { handleHealthWebhook } from "./routes/health-webhook";
 import { handleConsentGet, handleConsentPost } from "./routes/consent";
 import { handleConfig } from "./routes/config";
 import { handleProxy } from "./routes/proxy";
+import { handleDiag } from "./routes/diag";
+import { handleUsagePost, handleUsageQuery, handleUsageRange } from "./routes/usage";
+import { handleEvents } from "./routes/events";
 import { injectSiteConfig } from "./services/site-config";
 import { cleanupUnconfiguredDeviceData } from "./db";
 import { getConfiguredDeviceIds } from "./middleware/auth";
 
 // Start scheduled cleanup tasks (import triggers setInterval registration)
 import "./services/cleanup";
+import "./services/watcher";   // 事件 watcher（监听指定设备的变化）
 
 const configuredDeviceIds = getConfiguredDeviceIds();
 if (configuredDeviceIds.length > 0) {
@@ -107,6 +111,16 @@ const server = Bun.serve({
         response = handleConfig();
       } else if (pathname === "/api/proxy" && req.method === "GET") {
         response = await handleProxy(url);
+      } else if (pathname === "/api/usage" && req.method === "POST") {
+        response = await handleUsagePost(req);
+      } else if (pathname === "/api/usage" && req.method === "GET") {
+        response = handleUsageQuery(url);
+      } else if (pathname === "/api/usage/range" && req.method === "GET") {
+        response = handleUsageRange(url);
+      } else if (pathname === "/api/events" && req.method === "GET") {
+        response = handleEvents(req, url);
+      } else if (pathname === "/api/diag" && req.method === "POST") {
+        response = await handleDiag(req);
       } else if (!pathname.startsWith("/api/")) {
         // Static file serving disabled if directory doesn't exist
         if (!staticEnabled) {

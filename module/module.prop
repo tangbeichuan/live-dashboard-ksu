@@ -1,0 +1,6 @@
+id=live_dashboard_reporter
+name=Live Dashboard Reporter (root)
+version=v1.16
+versionCode=17
+author=DSH
+description=root 读取真实前台应用并上报（dumpsys，游戏可识别）；内置静态 sqlite3，直接读取 MIUI 计步库与小米健康档案上报步数/体重/身高。不依赖无障碍服务。

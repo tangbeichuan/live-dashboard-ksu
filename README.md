@@ -1,183 +1,121 @@
-# Live Dashboard
+# Live Dashboard 自建改造版
 
-实时设备活动仪表盘 — 公开展示你正在使用的应用，拥有二次元风格 UI 和隐私优先设计。
+> **KernelSU 上报模块 · 应用使用时长统计 · 事件通知 · 隐私模式 · 纯 IPv6 公网部署**
 
-在线演示：https://now.monikadream.homes/
+本仓库是 [**Monika-Dream/live-dashboard**](https://github.com/Monika-Dream/live-dashboard) 的**个人改造版**（独立仓库，非官方版本）。
+上游是一个"视监面板"：把你设备正在使用的应用实时展示在一个网页看板上。
 
-> 🤖 **用 AI 帮你部署？** 把 [AI_README.md](AI_README.md) 喂给你的 AI 助手——那是专门写给 AI 读的部署手册，含环境变量真源表、部署自检清单和全部真实用户踩坑的排查表。
+---
 
-## 截图
+## ⚠️ 上游署名与开源协议
 
-**日间模式（设备在线）**
+| 项目 | 内容 |
+|---|---|
+| 上游仓库 | [`Monika-Dream/live-dashboard`](https://github.com/Monika-Dream/live-dashboard) |
+| **原作者** | **Monika**（GitHub: [@Monika-Dream](https://github.com/Monika-Dream)） |
+| **开源协议** | **MIT License** —— 见 [LICENSE](./LICENSE)，**版权归原作者所有**：`Copyright (c) 2026 Monika` |
+| 基线版本 | commit [`6ba9a5e`](https://github.com/Monika-Dream/live-dashboard/commit/6ba9a5edc09b0c4389d1d6b57a4f55ff385d855b)（2026-07-23，`main` 分支） |
+| 上游 README | 原文保留在 [README.upstream.md](./README.upstream.md) |
 
-![日间模式](docs/preview-main-light.png)
+**本仓库对 MIT 协议的遵守**：
 
-**夜间模式（设备离线）**
+- `LICENSE` **原样保留**（MIT 要求在任何副本与衍生作品中保留版权声明与协议全文）
+- 本仓库**第一个 commit 是上游的原始快照**（未做任何修改），从第二个 commit 起才是本改造 —— 便于用 `git log` / `git diff` 核对改动
+- 本仓库的改动部分版权归本仓库作者，同样以 **MIT License** 发布
+- 二次使用本仓库时，请同时保留上游与本仓库的版权声明
 
-![夜间模式](docs/preview-main-dark.png)
+---
 
-## 特色
+## 改动清单（相对上游 `6ba9a5e`）
 
-- 猫耳装饰的视觉小说风格对话框 + 中文戏剧化活动描述
-- 飘落的樱花花瓣动画，夜间自动切换萤火主题
-- 四级隐私系统（SHOW / BROWSER / HIDE / SECRET）——银行、密码管理器等私密应用整应用匿名化，只留时长不留痕
-- 多面板聚合：环境变量配置好友的仪表盘，一个页面切换围观（只读代理，不暴露任何管理接口）
-- 自定义应用映射：挂载一个 JSON 文件即可新增/覆盖应用名与文案，无需改代码重构建
-- 系统托盘常驻 + AFK 检测（看视频/听歌时自动豁免）
-- 音乐检测（Spotify、QQ音乐、网易云等）
-- Health Connect 健康数据同步（Android）
-- 多设备多平台支持（Windows / macOS / Linux / Android）
+### 一、手机端：KernelSU 上报模块（新增 `module/`）
+
+上游依赖官方 Android App（无障碍快照 + UsageStats 回退）。本改造改为 **KernelSU（兼容 Magisk 格式）root 模块**：
+
+| 能力 | 说明 |
+|---|---|
+| 前台应用识别 | 直接 `dumpsys activity` 取 topResumedActivity，规避上游"无障碍快照有效期 12 小时"被 MIUI 游戏工具箱卡死的问题 |
+| **应用使用时长** | 解析 `dumpsys usagestats` 事件流，配对 `ACTIVITY_RESUMED/PAUSED` 计算**亮屏 / 解锁 / 各 App 前台时长**（必须排序 + 去重、熄屏后恢复计时） |
+| 健康数据 | 直读**小米运动健康** SQLite（`fitness_data` 的 `hr_record`/`sleep_segment`/`spo2_record`/`weight_item_record` 与 `fitness_summary`）+ MIUI 计步库，不依赖 Health Connect |
+| **隐私模式** | KernelSU「操作」按钮一键切换 / 按 App 包名名单 / 超时自动关闭；开启后只上报 `app_id=private`，不报应用名与窗口标题 |
+| **事件通知** | 轮询服务端事件，在本机弹**系统原生通知**（关键：必须以 `shell`(uid 2000) 身份发布，root 身份会被系统静默丢弃） |
+| 免依赖 | 内置静态编译的 aarch64 `sqlite3`，手机端无需任何额外依赖 |
+
+### 二、服务端（新增接口与事件系统）
+
+| 文件 | 改动 |
+|---|---|
+| `packages/backend/src/routes/usage.ts` | **新增**：`POST /api/usage`（上报使用时长 + 亮屏/解锁）、`GET /api/usage`（某天排行）、`GET /api/usage/range`（周/月区间 + 每日趋势）；含服务端**显示层排除列表** `USAGE_HIDE_APPS` |
+| `packages/backend/src/routes/events.ts` | **新增**：`GET /api/events`（Bearer 鉴权，**事件内容不在面板公开**） |
+| `packages/backend/src/services/watcher.ts` | **新增**：变化检测（上线/离线、打开应用、开始/拔掉充电、电量低于阈值、进入隐私模式）→ `events` 表；含**抖动抑制**（`notify` 标记：同设备同类型在冷却窗口内只通知一次） |
+| `packages/backend/src/routes/diag.ts` | **新增**：`POST /api/diag` 诊断通道（调试用途，可删除） |
+| `packages/backend/src/db.ts` | 新增表 `usage_stats`、`screen_time`、`events` 及相关语句 |
+| `packages/backend/src/index.ts` | 注册上述路由、启动 watcher |
+| `packages/backend/src/routes/proxy.ts` | 多面板代理白名单补充 `usage` / `usage/range` |
+
+### 三、前端
+
+| 文件 | 改动 |
+|---|---|
+| `src/components/UsageStats.tsx` | **新增**：应用使用时长统计卡（今天 / 近 7 天 / 近 30 天 + SVG 趋势折线 + 排行） |
+| `src/components/DatePicker.tsx` | 增加原生 `<input type="date">` 日期跳转（原版只能一天天翻） |
+| `src/lib/api.ts` | 新增 `fetchUsage` / `fetchUsageRange` 及类型定义 |
+| `app/page.tsx` | 挂载统计卡 |
+| `public/favicon.ico` | 新增图标（原版 `/favicon.ico` 会落到 SPA 兜底返回 HTML） |
+
+### 四、部署与文档
+
+- **`docs/项目文档.md`（约 900 行）**：自建部署实录 —— Debian + Bun + systemd + nginx（TLS / 限流 / 扫描器拦截）+ **纯 IPv6 公网访问**（ddns-go 只发布 AAAA + Let's Encrypt **DNS-01** 证书）+ 模块原理 + API 参考 + 运维手册 + 备份恢复 + 已知限制 + 全部踩坑记录
+
+---
 
 ## 快速开始
 
-```bash
-# 1. 生成密钥
-TOKEN=$(openssl rand -hex 16)
-SECRET=$(openssl rand -hex 32)
-
-# 2. 启动
-docker run -d --name live-dashboard \
-  -p 3000:3000 \
-  -v dashboard_data:/data \
-  -e HASH_SECRET=$SECRET \
-  -e DEVICE_TOKEN_1=$TOKEN:my-pc:MyPC:windows \
-  ghcr.io/monika-dream/live-dashboard:latest
-
-# 3. 打开 http://localhost:3000
-echo "Token: $TOKEN  ← Agent 配置用"
-```
-
-详细部署说明（docker-compose、VPS + Nginx + HTTPS）见 [Wiki - 快速部署](https://github.com/Monika-Dream/live-dashboard/wiki/快速部署)。
-
-## Agent 下载
-
-从 [GitHub Releases](https://github.com/Monika-Dream/live-dashboard/releases) 下载对应平台的客户端：
-
-| 平台 | 下载文件 | 配置指南 |
-|------|---------|---------|
-| Windows | `live-dashboard-agent.exe` | [Wiki - Windows Agent](https://github.com/Monika-Dream/live-dashboard/wiki/Agent-配置-Windows) |
-| macOS | `live-dashboard-agent-macos.zip` | [Wiki - macOS Agent](https://github.com/Monika-Dream/live-dashboard/wiki/Agent-配置-macOS) |
-| Android | `live-dashboard.apk` | [Wiki - Android App](https://github.com/Monika-Dream/live-dashboard/wiki/Agent-配置-Android) |
-| Linux | `live-dashboard-agent-linux` | [`linux-source` 分支 README](https://github.com/Monika-Dream/live-dashboard/tree/linux-source/agents/linux#readme) |
-
-## 主题
-
-| 分支 | 风格 | 说明 |
-|------|------|------|
-| `main` | 经典和风 | 暖粉色系、猫耳气泡框、樱花花瓣 |
-| `redesign/blossom-letter` | 花信 · 文艺书卷 | OKLCH 暖纸色、双栏布局、AI 每日总结 |
-| `redesign/pixel-room` | 像素房间 | 像素风 + 日夜切换（开发中） |
-
-## 分支结构
-
-| 分支 | 内容 |
-|------|------|
-| `main` | 后端 + 前端 + Docker + CI |
-| `windows-source` | Windows Agent 源码（Python） |
-| `macos-source` | macOS Agent 源码（Python） |
-| `android-source` | Android App 源码（Kotlin） |
-| `linux-source` | Linux Agent 源码（Python） |
-
-## 技术栈
-
-| 组件 | 技术 |
-|------|------|
-| 后端 | Bun + TypeScript + SQLite |
-| 前端 | Next.js 16 + React 19 + Tailwind CSS 4（静态导出） |
-| Windows Agent | Python + Win32 API + pystray + pycaw |
-| macOS Agent | Python + AppleScript + pystray |
-| Android App | Kotlin + Jetpack Compose + Health Connect |
-| Linux Agent | Python + X11/Wayland 分层检测 + MPRIS + pystray |
-| 部署 | Docker 多阶段构建 + Nginx |
-
-## 文档
-
-完整文档见 [GitHub Wiki](https://github.com/Monika-Dream/live-dashboard/wiki)：
-
-- [快速部署](https://github.com/Monika-Dream/live-dashboard/wiki/快速部署) — Docker 一键部署
-- [VPS 部署指南](https://github.com/Monika-Dream/live-dashboard/wiki/VPS-部署指南) — Nginx + HTTPS
-- [功能特性](https://github.com/Monika-Dream/live-dashboard/wiki/功能特性) — 完整功能列表
-- [架构与项目结构](https://github.com/Monika-Dream/live-dashboard/wiki/架构与项目结构) — 架构图 + 项目树
-- [隐私分级系统](https://github.com/Monika-Dream/live-dashboard/wiki/隐私分级系统) — SHOW / BROWSER / HIDE
-- [API 参考](https://github.com/Monika-Dream/live-dashboard/wiki/API-参考) — 端点、请求体、响应格式
-- [环境变量](https://github.com/Monika-Dream/live-dashboard/wiki/环境变量) — 配置项一览
-- [安全设计](https://github.com/Monika-Dream/live-dashboard/wiki/安全设计) — 安全特性
-- [自定义](https://github.com/Monika-Dream/live-dashboard/wiki/自定义) — 显示名、元数据、主题色
-- [本地开发](https://github.com/Monika-Dream/live-dashboard/wiki/本地开发) — 从源码构建
-- [手环/手表健康数据接入指南](docs/wearables-health-guide.md) — 小米/华为/WearOS/Apple Watch 各家路径、常见坑、故障排查
-
-## 自定义应用映射
-
-内置映射覆盖不到的应用，用一个 JSON 文件就能补——**不用改代码、不用重新构建镜像**：
-
-1. 把仓库根目录的 [`custom-mappings.example.json`](custom-mappings.example.json) 复制为 `custom-mappings.json`
-2. 放进数据卷（Docker 部署即 `/data/custom-mappings.json`），或用环境变量 `CUSTOM_MAPPINGS_FILE` 指定任意路径
-3. 重启容器生效
-
-格式（各段均可省略）：
-
-```json
-{
-  "windows": { "mygame.exe": { "name": "我的游戏", "statusText": "正在打自己做的游戏喵~" } },
-  "android": { "com.example.app": { "name": "某应用" } },
-  "macos":   { "SomeApp": { "statusText": "正在用 SomeApp 干活喵~" } },
-  "linux":   { "someapp": { "name": "某应用" } },
-  "statusTexts": { "微信": "正在微信上谈大生意喵~" }
-}
-```
-
-- `windows` / `android` / `macos` / `linux` 段按原始 `app_id`（进程名 / 包名，大小写不敏感）匹配
-- `statusTexts` 段按映射后的应用名匹配，用来给内置应用换文案
-- **与内置条目冲突时，以你的 JSON 为准**；非法条目会被跳过并在日志里提示
-
-### 内置文案库也是 JSON
-
-所有内置的"正在干什么喵~"文案（370+ 条精确条目 + 30+ 条关键词启发规则）都在
-[`packages/backend/src/data/status-texts.json`](packages/backend/src/data/status-texts.json)，
-文件顶部自带格式说明——想整体换一套人设/口癖，直接改这个文件重启即可
-（Docker 部署可以 volume 挂载覆盖同路径）。只想改个别应用就用上面的 `custom-mappings.json`，它优先级更高。
-
-### 识别不到的应用去哪了？
-
-Android 端上报时会附带本机 `PackageManager` 查到的应用显示名（`app_label`），
-后端映射表未命中时自动用它兜底——所以**任何已安装的应用都会显示正确名称**，
-再配合启发式文案规则（名字里带"小说"就"正在看小说喵~"之类）给出贴切的状态文案。
-内置映射表只需要维护"名称需要更好文案"的那部分应用。
-
-想把自定义直接贡献回项目的话，改源码里的 `packages/backend/src/data/app-overrides.ts`（按 app_id 覆盖）、基础映射表 `packages/backend/src/data/app-names.json` 或文案库 `packages/backend/src/data/status-texts.json`，然后提 PR。
-
-## 多面板聚合
-
-想在自己的页面上同时围观朋友的仪表盘？配置 `EXTERNAL_DASHBOARDS` 环境变量（JSON 数组）即可，前端会出现面板切换器：
+上游的构建方式不变（Bun + Next.js 静态导出）：
 
 ```bash
-EXTERNAL_DASHBOARDS='[{"id":"friend1","name":"小明的面板","url":"https://now.friend.example"}]'
+# 后端（Bun）
+cd packages/backend
+bun install
+# 按 .env.example 配置环境变量（DEVICE_TOKEN_n / HASH_SECRET / STATIC_DIR …）
+bun run src/index.ts
+
+# 前端（Next.js 静态导出）
+cd packages/frontend
+bun install
+bun run build                 # 产出 out/
+rm -rf ../backend/public && cp -r out ../backend/public
 ```
 
-- `id` 任意唯一标识（`local` 保留给本站）；`url` 是对方站点根地址（须为 http/https）
-- 数据经本站 `/api/proxy` 只读转发，浏览器不直连对方站点，也不需要对方做任何配置
+**手机端模块**（需要 KernelSU 或 Magisk，Android 需 root）：
 
-## 隐私与安全
+```bash
+# 1) 改配置
+vim module/config.sh    # SERVER_PRIMARY / TOKEN / DEVICE_ID / USAGE_* / EVENT_* / PRIVACY_*
+                        # TOKEN 取服务端 DEVICE_TOKEN_n 的第一段（冒号前）
 
-本项目的定位是"把此刻的状态公开给朋友看"，安全设计围绕"公开的只有状态，别的什么都不漏"：
+# 2) 打包（保持 module.prop 在 zip 根目录）
+cd module && zip -r ../ld-reporter.zip .
 
-- 窗口标题原文**永不落库**（仅存 HMAC-SHA256 去重哈希，`HASH_SECRET` 必填）
-- 四级隐私：聊天/邮件/金融/系统工具默认隐藏标题；**银行、券商、密码管理器、验证器、政务类整应用匿名化**为"私密应用"，只保留使用时长
-- 上报鉴权用 Bearer Token（`DEVICE_TOKEN_N`），公开接口只读且不含设备令牌信息
-- 多面板代理只允许白名单端点（current/timeline/health-data/config）、6 秒超时、1MB 响应上限，目标地址只能来自你自己的环境变量配置
-- 可选 `REQUIRE_EXPLICIT_CONSENT=1`：开启后设备必须先 POST `/api/consent` 明确同意，才能上报活动/健康数据
+# 3) 手机端用 KernelSU「从本地安装」后重启；
+#    或解压到 /data/adb/modules/live_dashboard_reporter/
+```
 
-## 致谢
+详细步骤、参数语义与踩坑记录见 **[docs/项目文档.md](./docs/项目文档.md)**。
 
-感谢以下社区成员的代码贡献与思路（对应代码处均有署名注释）：
+---
 
-- [@Steve5wutongyu6](https://github.com/Steve5wutongyu6) — macOS Agent 托盘/设置窗崩溃修复方案（PR #35），主干修复基于其思路扩展
-- [@nmb1337](https://github.com/nmb1337) — Android 保活看门狗思路（PR #37）、Agent 设置窗「测试连接」交互、CI 自动构建 APK 的做法
-- [@qwe5283](https://github.com/qwe5283) — 发现并修复健康数据两个关键 bug：会话型记录（睡眠/锻炼）增量同步漏报、记录被数据源修正后旧值不更新
-- [@luckylaiCN](https://github.com/luckylaiCN) — Agent 打包（PyInstaller）路径兼容修复
+## 本改造版的已知限制
 
-也感谢每一位提交 issue、参与测试的朋友。
+1. **仅支持 IPv6 对外**（家庭宽带无公网 IPv4 时的方案，见文档 §4.1）
+2. 健康数据依赖**小米运动健康**的数据库结构，换品牌 / 换 App 不适用
+3. 使用时长依赖 `dumpsys usagestats` 事件流（最多回看 24 小时），**更早的历史补不了**
+4. 事件通知依赖手机上的模块在运行；被系统杀掉期间会漏通知（事件仍留存在服务端库里）
+5. `events` / `health_records` 目前**没有过期清理策略**（`activities` 有 7 天自动清理）
 
-## 许可证
+---
 
-MIT
+## 许可
+
+- 上游代码：**MIT License**，`Copyright (c) 2026 Monika`（见 [LICENSE](./LICENSE)）
+- 本仓库改动：同样以 **MIT License** 发布

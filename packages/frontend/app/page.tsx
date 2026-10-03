@@ -11,6 +11,7 @@ import DeviceCard from "@/components/DeviceCard";
 import DatePicker from "@/components/DatePicker";
 import Timeline from "@/components/Timeline";
 import HealthData from "@/components/HealthData";
+import UsageStats from "@/components/UsageStats";
 import SiteMetadataSync from "@/components/SiteMetadataSync";
 
 interface DashboardOption extends DashboardProfile {
@@ -366,6 +367,12 @@ function HomeInner() {
                   dashboardId={activeDashboardId}
                 />
               )}
+
+              <UsageStats
+                selectedDate={selectedDate}
+                deviceId={selectedDevice?.device_id}
+                dashboardId={activeDashboardId}
+              />
             </div>
           </div>
         </>

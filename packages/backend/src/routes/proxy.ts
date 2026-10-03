@@ -4,13 +4,15 @@
 // 管理后台的安全顾虑）。
 import { getSiteConfig } from "../services/site-config";
 
-type ProxyEndpoint = "current" | "timeline" | "health-data" | "config";
+type ProxyEndpoint = "current" | "timeline" | "health-data" | "config" | "usage" | "usage/range";
 
 const ALLOWED_ENDPOINTS = new Set<ProxyEndpoint>([
   "current",
   "timeline",
   "health-data",
   "config",
+  "usage",
+  "usage/range",
 ]);
 
 const ALLOWED_QUERY_KEYS: Record<ProxyEndpoint, string[]> = {
@@ -18,6 +20,8 @@ const ALLOWED_QUERY_KEYS: Record<ProxyEndpoint, string[]> = {
   config: [],
   timeline: ["date", "tz"],
   "health-data": ["date", "tz", "device_id"],
+  usage: ["date", "device_id"],
+  "usage/range": ["end", "days", "device_id"],
 };
 
 function getDashboardUrl(dashboardId: string): string | null {
